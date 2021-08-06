@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<OSCInputGroup>
+  <oscMessage>/wek/inputs</oscMessage>
+  <numInputs>16</numInputs>
+  <groupName>Inputs</groupName>
+  <inputNames>
+    <string>Hand_Number</string>
+    <string>ThumbExtension_x</string>
+    <string>ThumbExtension_y</string>
+    <string>ThumbExtension_z</string>
+    <string>IndexExtension_x</string>
+    <string>IndexExtension_y</string>
+    <string>IndexExtension_z</string>
+    <string>MiddleExtension_x</string>
+    <string>MiddleExtension_y</string>
+    <string>MiddleExtension_z</string>
+    <string>RingExtension_x</string>
+    <string>RingExtension_y</string>
+    <string>RingExtension_z</string>
+    <string>PinkyExtension_x</string>
+    <string>PinkyExtension_y</string>
+    <string>PinkyExtension_z</string>
+  </inputNames>
+</OSCInputGroup>
