@@ -225,7 +225,7 @@ class SampleListener(Leap.Listener):
             print ""
 
         c.send(oscmsg)
-        #time.sleep(0.2)
+        #time.sleep(0.1)
 
 
     def state_string(self, state):

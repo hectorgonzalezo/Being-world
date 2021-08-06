@@ -101,10 +101,25 @@ Pdef(\chords).play
 
 
 //receives only information from gestures
-
+~proxy[1] = {Impulse.ar(5)};
+~proxy.set(\delay, 2, \feeback, 2)
 
 (
-OSCdef(\test, {|msg, time, addr, recvPort|
+~proxy = NodeProxy.audio(s, 2);
+~proxy.play;
+~proxy.fadeTime = 1;
+
+~proxyPl = NodeProxy.audio(s, 2);
+~proxyPl.play;
+
+
+~proxy[100] = \filter -> { arg in, delay=1, damp= 1, size = 1, diff= 0.707, feedback=0.1;
+	Greyhole.ar(in, delay, damp, size, diff, feedback)};
+
+~proxyPl[100] = \filter -> { arg in; FreeVerb.ar(in, 0.8)};
+
+
+OSCdef(\gestures, {|msg, time, addr, recvPort|
 	var type, id, state, position, direction, speed, progress, radius, angle, degrees, result;
 	//detect kind of gesture
 	if(msg.size != 7, {type = 'swipe'}, {type = 'circle'});
@@ -140,16 +155,37 @@ recvPort: 57130
 			degrees = msg[5];
 			result = msg[6];
 	[id, progress, radius, angle, degrees, result].postln;
-	if(result == 'clockwise',
-		{coef = 0.3},
-		{coef = 0.8});
 
-	if(progress == 'STATE_START',
+	~proxy.fadeTime = 0.1;
+
+
+	if(result == 'clockwise',
+		{
+			//play this sound while
+		if(progress == 'STATE_START', {
+				~proxy[0] = {|amp = 0.5, detune=1| Formlet.ar(WhiteNoise.ar*2,  angle.linexp(1, 100, 200, 50) * detune, 0.2, 0.5 )};
+		});
+
+			~proxy.set(
+				\feeback, radius.linlin(0, 15, 0.1, 1).min(1),
+				\size, radius.linlin(0, 15, 0.1, 1).min(1),
+				\damp, radius.linlin(0, 15, 1.0, 0),
+				\detune, radius.linlin(0, 15, 1.0, 5)
+			);
+
+		if(progress == 'STATE_END',
+			{~proxy.fadeTime = 0.5;
+					~proxy[0] = nil;
+			});
+	},
+
+		{if(progress == 'STATE_START',
 		{
 			(angle.linlin(1, 100, 50, 400)).postln;
-			{Pluck.ar(WhiteNoise.ar, 1, 2, (angle.linexp(1, 100, 600, 50)).reciprocal, 2, coef)}.play;
-			'ya'.postln;
-	});
+			~proxyPl[0] = {Pluck.ar(WhiteNoise.ar, 1, 2, (angle.linexp(1, 100, 600, 50)).reciprocal, 2, 0.4)!2};
+	});});
+
+
 	~lastDegrees = degrees;
 
 
@@ -192,7 +228,5 @@ recvPort: 57120
 );
 )
 
-0.3.round(0.2)
 
-
-(0..100).collect(_.lincurve(0, 100, 0, 1, -4)).plot
+11.min(10)
