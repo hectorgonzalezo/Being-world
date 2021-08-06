@@ -108,124 +108,129 @@ class SampleListener(Leap.Listener):
 
             #send 0 for left hand and 1 for right hand
             handNumber = 0 if hand.is_left else 1
-            oscmsg.append(handNumber)
 
-            #extracts coordinates of palm in order to calculate finger extensions
-            handCoordinate = (vectorCoordinates(hand_pos[2]))
+            #for left hand, controlling wekinator
+            if handNumber == 0:
 
+                oscmsg.append(handNumber)
 
-            # Get arm bone
-            arm = hand.arm
-            arm_pos = (
-                arm.direction,
-                arm.wrist_position,
-                arm.elbow_position)
-            #print "  Arm direction: %s, wrist position: %s, elbow position: %s" % arm_pos
+                #extracts coordinates of palm in order to calculate finger extensions
+                handCoordinate = (vectorCoordinates(hand_pos[2]))
 
 
-            #oscmsg.append(tupleExtractor(arm_pos))
-
-            #empty array
-            fingerExtensions = []
-
-            # Get fingers
-            for finger in hand.fingers:
-
-                finger_info = (
-                    self.finger_names[finger.type],
-                    finger.id,
-                    finger.length,
-                    finger.width,
-                    finger.is_extended)
-                #print "    %s finger, id: %d, length: %fmm, width: %fmm, Extended: %d" % finger_info
-
-                #oscmsg.append(tupleExtractor(finger_info))
-
-                # Get bones
-                for b in range(0, 4):
-                    bone = finger.bone(b)
-                    bone_info = (
-                        self.bone_names[bone.type],
-                        bone.prev_joint,
-                        bone.next_joint,
-                        bone.direction)
-                    #print "      Bone: %s, start: %s, end: %s, direction: %s" % bone_info
-                    #oscmsg.append(tupleExtractor(bone_info))
-
-                    extensionCoordinate = []
-
-                    if b == 3:
-                        #send only info about the end of the finger
-                        #oscmsg.append(vectorCoordinates(bone.next_joint))
-                        boneCoordinate = (vectorCoordinates(bone.next_joint))
+                # Get arm bone
+                arm = hand.arm
+                arm_pos = (
+                    arm.direction,
+                    arm.wrist_position,
+                    arm.elbow_position)
+                #print "  Arm direction: %s, wrist position: %s, elbow position: %s" % arm_pos
 
 
-                        for i in range(3):
-                            extensionCoordinate.append(handCoordinate[i] - boneCoordinate[i])
+                #oscmsg.append(tupleExtractor(arm_pos))
 
-                        print "       Extensions %s" % extensionCoordinate
+                #empty array
+                fingerExtensions = []
 
-                    fingerExtensions.append(extensionCoordinate)
+                # Get fingers
+                for finger in hand.fingers:
 
-            oscmsg.append(fingerExtensions)
+                    finger_info = (
+                        self.finger_names[finger.type],
+                        finger.id,
+                        finger.length,
+                        finger.width,
+                        finger.is_extended)
+                    #print "    %s finger, id: %d, length: %fmm, width: %fmm, Extended: %d" % finger_info
+
+                    #oscmsg.append(tupleExtractor(finger_info))
+
+                    # Get bones
+                    for b in range(0, 4):
+                        bone = finger.bone(b)
+                        bone_info = (
+                            self.bone_names[bone.type],
+                            bone.prev_joint,
+                            bone.next_joint,
+                            bone.direction)
+                        #print "      Bone: %s, start: %s, end: %s, direction: %s" % bone_info
+                        #oscmsg.append(tupleExtractor(bone_info))
+
+                        extensionCoordinate = []
+
+                        if b == 3:
+                            #send only info about the end of the finger
+                            #oscmsg.append(vectorCoordinates(bone.next_joint))
+                            boneCoordinate = (vectorCoordinates(bone.next_joint))
 
 
+                            for i in range(3):
+                                extensionCoordinate.append(handCoordinate[i] - boneCoordinate[i])
 
-        # Get gestures
-        for gesture in frame.gestures():
+                            print "       Extensions %s" % extensionCoordinate
 
-            oscmsg_gest = OSC.OSCMessage()
-            oscmsg_gest.setAddress("/leap/gestures")
+                        fingerExtensions.append(extensionCoordinate)
 
-            if gesture.type == Leap.Gesture.TYPE_CIRCLE:
-                circle = CircleGesture(gesture)
+                oscmsg.append(fingerExtensions)
 
-                # Determine clock direction using the angle between the pointable and the circle normal
-                if circle.pointable.direction.angle_to(circle.normal) <= Leap.PI/2:
-                    clockwiseness = "clockwise"
-                else:
-                    clockwiseness = "counterclockwise"
+        #for right hand, controlling only gestures
+            if handNumber == 1:
 
-                # Calculate the angle swept since the last frame
-                swept_angle = 0
-                if circle.state != Leap.Gesture.STATE_START:
-                    previous_update = CircleGesture(controller.frame(1).gesture(circle.id))
-                    swept_angle =  (circle.progress - previous_update.progress) * 2 * Leap.PI
+                # Get gestures
+                for gesture in frame.gestures():
 
-                circle_result = (gesture.id, self.state_names[gesture.state], circle.progress, circle.radius, swept_angle * Leap.RAD_TO_DEG, clockwiseness)
+                    oscmsg_gest = OSC.OSCMessage()
+                    oscmsg_gest.setAddress("/leap/gestures")
 
-                print "  Circle id: %d, %s, progress: %f, radius: %f, angle: %f degrees, %s" % circle_result
-                oscmsg_gest.append(circle_result)
+                    if gesture.type == Leap.Gesture.TYPE_CIRCLE:
+                        circle = CircleGesture(gesture)
 
-            if gesture.type == Leap.Gesture.TYPE_SWIPE:
-                swipe = SwipeGesture(gesture)
-                swipe_result =  (gesture.id, self.state_names[gesture.state], swipe.position, swipe.direction, swipe.speed)
+                        # Determine clock direction using the angle between the pointable and the circle normal
+                        if circle.pointable.direction.angle_to(circle.normal) <= Leap.PI/2:
+                            clockwiseness = "clockwise"
+                        else:
+                            clockwiseness = "counterclockwise"
 
-                print "  Swipe id: %d, state: %s, position: %s, direction: %s, speed: %f" % swipe_result
-                oscmsg_gest.append(tupleExtractor(swipe_result))
-                #oscmsg_gest.append(swipe_result[4])
+                        # Calculate the angle swept since the last frame
+                        swept_angle = 0
+                        if circle.state != Leap.Gesture.STATE_START:
+                            previous_update = CircleGesture(controller.frame(1).gesture(circle.id))
+                            swept_angle =  (circle.progress - previous_update.progress) * 2 * Leap.PI
 
-            if gesture.type == Leap.Gesture.TYPE_KEY_TAP:
-                keytap = KeyTapGesture(gesture)
-                keytap_result = (gesture.id, self.state_names[gesture.state], keytap.position, keytap.direction)
+                        circle_result = (gesture.id, self.state_names[gesture.state], circle.progress, circle.radius, swept_angle * Leap.RAD_TO_DEG, clockwiseness)
 
-                print "  Key Tap id: %d, %s, position: %s, direction: %s" % keytap_result
-                oscmsg_gest.append(keytap_result)
+                        print "  Circle id: %d, %s, progress: %f, radius: %f, angle: %f degrees, %s" % circle_result
+                        oscmsg_gest.append(circle_result)
 
-            if gesture.type == Leap.Gesture.TYPE_SCREEN_TAP:
-                screentap = ScreenTapGesture(gesture)
-                screentap_result = (gesture.id, self.state_names[gesture.state], screentap.position, screentap.direction)
-                print "  Screen Tap id: %d, %s, position: %s, direction: %s" %  screentap_result
-                oscmsg_gest.append(screentap_result)
-                
-            #send osc message with information about gestures
-            c2.send(oscmsg_gest)
+                    if gesture.type == Leap.Gesture.TYPE_SWIPE:
+                        swipe = SwipeGesture(gesture)
+                        swipe_result =  (gesture.id, self.state_names[gesture.state], swipe.position, swipe.direction, swipe.speed)
+
+                        print "  Swipe id: %d, state: %s, position: %s, direction: %s, speed: %f" % swipe_result
+                        oscmsg_gest.append(tupleExtractor(swipe_result))
+                        #oscmsg_gest.append(swipe_result[4])
+
+                    if gesture.type == Leap.Gesture.TYPE_KEY_TAP:
+                        keytap = KeyTapGesture(gesture)
+                        keytap_result = (gesture.id, self.state_names[gesture.state], keytap.position, keytap.direction)
+
+                        print "  Key Tap id: %d, %s, position: %s, direction: %s" % keytap_result
+                        oscmsg_gest.append(keytap_result)
+
+                    if gesture.type == Leap.Gesture.TYPE_SCREEN_TAP:
+                        screentap = ScreenTapGesture(gesture)
+                        screentap_result = (gesture.id, self.state_names[gesture.state], screentap.position, screentap.direction)
+                        print "  Screen Tap id: %d, %s, position: %s, direction: %s" %  screentap_result
+                        oscmsg_gest.append(screentap_result)
+                        
+                    #send osc message with information about gestures
+                    c2.send(oscmsg_gest)
 
         if not (frame.hands.is_empty and frame.gestures().is_empty):
             print ""
 
         c.send(oscmsg)
-        #time.sleep(0.1)
+        #time.sleep(0.2)
 
 
     def state_string(self, state):
