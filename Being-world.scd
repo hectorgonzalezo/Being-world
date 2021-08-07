@@ -1,5 +1,6 @@
 (
-SynthDef(\gs, {
+s.waitForBoot({
+	SynthDef(\gs, {
 		|sync =1, dens=20, grainDur=0.1, durRand=1, buf=0,
 		rate=1, pos=0, posSpeed=1, posRand=0,
 		grainEnv=(-1), pan=0, panHz=0, panRand=0, gate=1, atk=1, dec=0.3, rel=1, crv=(-1), amp=1, out=0, ampLFO=0, lfoFreq= 0.5|
@@ -37,168 +38,245 @@ SynthDef(\gs, {
 
 	}).add;
 
-~dirpath = "11_apr_21".resolveRelative;
-~forest = BuffersFolder.readChannel(~dirpath);
-
-~proxy = NodeProxy.audio(s, 2);
-~proxy.play;
-~proxy.fadeTime = 1;
-
-~proxyPl = NodeProxy.audio(s, 2);
-~proxyPl.play;
 
 
-~proxy[100] = \filter -> { arg in, delay=1, damp= 1, size = 1, diff= 0.707, feedback=0.1;
-	Greyhole.ar(in, delay, damp, size, diff, feedback)};
-
-~proxyPl[100] = \filter -> { arg in; FreeVerb.ar(in, 0.8)};
-
-
-OSCdef(\gestures, {|msg, time, addr, recvPort|
-	var type, id, state, position, direction, speed, progress, radius, angle, degrees, result;
-	//detect kind of gesture
-	if(msg.size != 7, {type = 'swipe'}, {type = 'circle'});
-	//type.postln;
+	SynthDef(\hit,
+		{arg ress = 0, amp =1 ;
+			var klank, env;
+			klank = Klank.ar(`[{ExpRand(70,10000)}!7, {Rand(0.128,0.700)}!7],BrownNoise.ar(0.7));
+			klank = klank;
+			env = EnvGen.kr(Env.perc(0.07, ress), doneAction:2);
+			klank = CombC.ar(klank, 0.2, Rand(0.01, 0.2));
+			Out.ar(0, klank*env.dup*0.0128 * amp);
+	}).add;
 
 
-	if(type == 'swipe',
-		{~playSwipe.value(msg)},
-		{~playCircle.value(msg);}
-	);
 
-},
-'/leap/gestures',
-recvPort: 57130
-);
-
-~randomHarm = 1;
-
-~playSwipe = {
-	|msg |
-	~randomHarm = [rrand(0.5, 2.5), 1].choose;
-	~proxy[0] = nil;
-
-};
+	SynthDef(\vplaym,
+		{arg out = 0, buf = 0, rate = 1, amp = 0.5, pan = 0, pos=0, gate=1;
+			var sig, env;
+			sig = Pan2.ar(PlayBuf.ar(2,buf,BufRateScale.ir(buf) * rate,1,BufDur.kr(buf)*pos*44100,doneAction:2),pan);
+			env = Linen.kr(gate, doneAction: 2);
+			sig = sig * env;
+			sig = sig * amp;
+			Out.ar(out,sig);
+	}).add;
 
 
-~lastDegrees = nil;
 
-~playCircle = {
-	|msg |
-	var id, progress, radius, angle, degrees, result, coef;
-	        id = msg[1];
-			progress = msg[2];
-			radius = msg[3];
-			angle = msg[4];
-			degrees = msg[5];
-			result = msg[6];
-	[id, progress, radius, angle, degrees, result].postln;
+	~randomHarm = 1;
 
-	~proxy.fadeTime = 0.1;
+	~playSwipe = {
+		|msg |
+
+		'swipe'.postln;
+		msg.postln;
+
+		if(msg[2] == 'STATE_START', {
+			~randomHarm = [rrand(0.5, 2.5), 1].choose;
+			~proxy[0] = nil;
+
+			x= rrand(0.3, 0.6);
+
+			y = Synth(\Synth3, [\ress, x+(7*x), \amp, 0.01])
 
 
-	if(result == 'clockwise',
-		{
-			//play this sound while
-		if(progress == 'STATE_START', {
-				~proxy[0] = {|amp = 0.1, detune=1| Formlet.ar(WhiteNoise.ar*0.02,  angle.linexp(1, 100, 200, 50) * detune.round(0.25), 0.2, 0.5 )};
 		});
 
-			~proxy.set(
-				\feeback, radius.linlin(0, 15, 0.1, 1).min(1),
-				\size, radius.linlin(0, 15, 0.1, 1).min(1),
-				\damp, radius.linlin(0, 15, 1.0, 0),
-				\detune, radius.linlin(0, 15, 1.0, 5)
-			);
+	};
 
-		if(progress == 'STATE_END',
-			{~proxy.fadeTime = 0.5;
-					~proxy[0] = nil;
-			});
+	s.sync;
+
+
+
+
+	//////////////////////////////////////////////////////////////////////
+	////////////////////////////Functions///////////////////////////////////
+	//////////////////////////////////////////////////////////////////////
+
+
+
+	~lastDegrees = nil;
+
+	~playCircle = {
+		|msg |
+		var id, progress, radius, angle, degrees, result, coef;
+		id = msg[1];
+		progress = msg[2];
+		radius = msg[3];
+		angle = msg[4];
+		degrees = msg[5];
+		result = msg[6];
+		[id, progress, radius, angle, degrees, result].postln;
+
+		~proxy.fadeTime = 0.1;
+
+
+		if(result == 'clockwise',
+			{
+				//play this sound while
+				if(progress == 'STATE_START', {
+					~proxy[0] = {
+						|amp = 0.1, detune=1, panLFOFreq=0|
+						Splay.ar(
+							Formlet.ar(
+								WhiteNoise.ar*0.1,
+								angle.linexp(1, 100, 400, 100) * detune,
+								0.1,
+								0.5),
+							center: LFTri.kr(panLFOFreq)
+						)
+					};
+				});
+
+				~proxy.set(
+					\feeback, radius.linlin(0, 15, 0.5, 1).min(1),
+					\size, radius.linlin(0, 15, 0.1, 1).min(1),
+					\damp, radius.linlin(0, 15, 1.0, 0),
+					\detune, radius.lincurve(0, 20, 1.0, 5, 4),
+					\panLFOFreq, radius.linlin(0, 20, 0, 5)
+				);
+
+				if(progress == 'STATE_END',
+					{~proxy.fadeTime = 0.5;
+						~proxy[0] = nil;
+				});
+			},
+
+			{if(progress == 'STATE_START',
+				{
+					(angle.linlin(1, 100, 50, 400)).postln;
+					~proxyPl[0] = {
+						Splay.ar(Pluck.ar(
+							WhiteNoise.ar,
+							1,
+							0.2,
+							(angle.linexp(1, 100, 600, 50)).reciprocal,
+							2,
+							rrand(0.2, 0.6),
+							rrand(0.3, 0.9))!2,
+						center:[0.8, -0.8].choose)
+					};
+		});});
+
+
+
+	};
+
+
+	s.sync;
+
+	//////////////////////////////////////////////////////////////////////
+	////////////////////////////Sounds///////////////////////////////////
+	//////////////////////////////////////////////////////////////////////
+
+	~dirpath = "11_apr_21".resolveRelative;
+	~forest = BuffersFolder.readChannel(~dirpath);
+	~forestStereo = BuffersFolder.read(~dirpath);
+
+
+
+
+
+	//////////////////////////////////////////////////////////////////////
+	////////////////////////////Proxys and sounds ///////////////////////////////////
+	//////////////////////////////////////////////////////////////////////
+
+
+	~proxy = NodeProxy.audio(s, 2);
+	~proxy.play;
+	~proxy.fadeTime = 1;
+
+	~proxyPl = NodeProxy.audio(s, 2);
+	~proxyPl.play;
+
+
+	~proxy[100] = \filter -> { arg in, delay=0.5, damp= 1, size = 1, diff= 0.707, feedback=0.5;
+		Greyhole.ar(in, delay, damp, size, diff, feedback)};
+
+	~proxyPl[100] = \filter -> { arg in; FreeVerb.ar(in, 0.8)};
+
+
+
+
+	//////////////////////////////////////////////////////////////////////
+	////////////////////////////OSC functions///////////////////////////////////
+	//////////////////////////////////////////////////////////////////////
+
+
+	OSCdef(\gestures, {|msg, time, addr, recvPort|
+		var type, id, state, position, direction, speed, progress, radius, angle, degrees, result;
+		//detect kind of gesture
+		if(msg.size != 7, {type = 'swipe'}, {type = 'circle'});
+		//type.postln;
+
+
+		if(type == 'swipe',
+			{~playSwipe.value(msg)},
+			{~playCircle.value(msg);}
+		);
+
 	},
-
-		{if(progress == 'STATE_START',
-		{
-			(angle.linlin(1, 100, 50, 400)).postln;
-				~proxyPl[0] = {Pluck.ar(PinkNoise.ar, 1, 2, (angle.linexp(1, 100, 600, 50)).reciprocal, 2, 0.4, rrand(0.1, 0.6))!2};
-	});});
-
-
-
-};
-
-
-
-a = Synth(\gs, [\buf, ~forest[0], \amp, 2])!5;
-
-OSCdef(\wekinator, {|msg, time, addr, recvPort|
-	msg.postln;
-
-	a.do{
-		|element, i|
-		element.set(
-		\sync, msg[1].round,
-		\dens, msg[2].linexp(0, 1, 2, 200) * (i+1) * ~randomHarm,
-		\grainDur, msg[3].linlin(0, 1, 0.1, 3000.reciprocal),
-		\durRand, msg[4]+1,
-		\rate, msg[5].lincurve(0, 1, 0.5, 2.5, -3),
-		\pos, msg[6],
-		\posSpeed, msg[7].linlin(0, 1, 0.5, 1.5),
-		\pan, msg[8].linlin(0, 1, -0.8, 0.8),
-		\panHz, msg[9].linlin(0, 1, 0, 10),
-		\panRand, msg[10].round(0.3),
-		\amp, msg[11].lincurve(0, 1, 0.5, 6, -2),
-		\ampLFO, msg[12],
-		\lfoFreq, msg[13].linexp(0, 1, 0.5, 20));
-	}
-},
-'/wek/outputs',
-recvPort: 57120
-);
-)
-
-
-
-
-(
-	Pdef(\chords,
-		Pbind(
-			\instrument, \gs,
-			\atk, Pwhite(3,7),
-			\rel, Pwhite(3,5),
-			\dur, Pdefn(\chordsDur,Pwrand([
-				Rest(7),
-				Pwhite(10,30,1)+Pkey(\dur)+Pkey(\rel)],
-			[0.3,0.7],inf)),
-			\legato, Pwhite(0.9,1.1),
-			\buf, ~forest[0],
-			\sync, 1,
-			\pos, Pwhite(0.1,0.3,inf),
-			\posSpeed, Pwhite(0.01,0.05,inf),
-			\dens, Pwrand([
-				(([ 32.0, 34.0, 37.0, 39.0, 41.0 ]
-					+Array.rand(5,0,0.05)
-					+Pbrown(0,12,2.0,inf)
-				).midicps)*
-				Pfunc({Array.fill(5,{[1,2,3].wchoose([10,5,2].normalizeSum)})},),
-
-				(([ 32.0, 34.0, 38.0, 40.0, 44.0 ]
-					+Array.rand(5,0,0.05)
-					+Pbrown(0,12,2.0,inf)
-				).midicps)*
-				Pfunc({Array.fill(5,{[1,2,3].wchoose([10,5,2].normalizeSum)})})
-			],
-			[0.75,0.25],
-			inf),
-			\grainDur, Pwhite(0.1,0.12,inf),
-			\ampLFO,1,
-			\lfoFreq, Array.rand(5,0.3,1),
-			\amp, Pfunc({Array.fill(5,{rrand(5.0,9.5)})})*Pdefn(\chordAmp,1),
-			\pan, Pfunc({Array.fill(5,{rrand(-1.0,1.0).round(0.25)})}),
-			\panHz, Pfunc({Array.fill(5,{rrand(0.1,0.5)})}),
-			\panRand, Pfunc({Array.fill(5,{rrand(0.3,1).round(0.5)})}),
-			\stretch, 1
-		)
+	'/leap/gestures',
+	recvPort: 57130
 	);
+
+	~start = 'no';
+
+	OSCdef(\wekinator, {|msg, time, addr, recvPort|
+		msg.postln;
+
+		if(~start == 'no',
+			{
+				~granular = Synth(\gs, [\buf, ~forest[5], \amp, 1])!5;
+
+				Pdef(\player, Pbind(
+					\instrument, \vplaym,
+					\buf, ~forestStereo[5],
+					\dur, Pwhite(1, 5),
+					\amp, 0.5,
+					\pos, Pwhite(0, 1),
+					\legato, 1.5
+				)).play;
+
+				~start = 'yes';
+
+
+		});
+
+		~granular.do{
+			|element, i|
+			element.set(
+				\sync, msg[1].round,
+				\dens, msg[2].linexp(0, 1, 2, 200) * (i+1) * ~randomHarm,
+				\grainDur, msg[3].linlin(0, 1, 0.1, 3000.reciprocal),
+				\durRand, msg[4]+1,
+				\rate, msg[5].lincurve(0, 1, 0.5, 2.5, -3),
+				\pos, msg[6],
+				\posSpeed, msg[7].linlin(0, 1, 0.5, 1.5),
+				\pan, msg[8].linlin(0, 1, -0.8, 0.8),
+				\panHz, msg[9].linlin(0, 1, 0, 10),
+				\panRand, msg[10].round(0.3),
+				\amp, msg[11].lincurve(0, 1, 0.5, 3, -2),
+				\ampLFO, msg[12],
+				\lfoFreq, msg[13].linexp(0, 1, 0.5, 20));
+		}
+	},
+	'/wek/outputs',
+	recvPort: 57120
+	);
+
+
+
+});
+
+s.reboot;
+
+
+
+
+
+
 )
-Pdef(\chords).play
+
+
