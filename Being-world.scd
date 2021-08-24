@@ -73,12 +73,25 @@ s.waitForBoot({
 		msg.postln;
 
 		if(msg[2] == 'STATE_START', {
+			//change harmonization of density in granular synth
 			~randomHarm = [rrand(0.5, 2.5), 1].choose;
 			~proxy[0] = nil;
 
 			x= rrand(0.3, 0.6);
 
-			y = Synth(\Synth3, [\ress, x+(7*x), \amp, 0.01])
+			y = Synth(\hit, [\ress, x+(7*x), \amp, 0.4]);
+
+			//choose a tuning and scale for the counterclockwise motion
+
+
+			~scale = Array.new(3);
+			~choice = [Scale.chooseFromSelected, Scale.pelog].wchoose([0.7, 0.3]);
+			~tuning = Tuning.choose(~choice.pitchesPerOctave);
+			~choice.tuning_(~tuning);
+	[36,48, 60].do({ |i|
+				~scale.add((~choice.degrees +i).midicps)});
+
+	~scale = ~scale.flatten;
 
 
 		});
@@ -88,8 +101,6 @@ s.waitForBoot({
 	s.sync;
 
 
-
-
 	//////////////////////////////////////////////////////////////////////
 	////////////////////////////Functions///////////////////////////////////
 	//////////////////////////////////////////////////////////////////////
@@ -97,6 +108,13 @@ s.waitForBoot({
 
 
 	~lastDegrees = nil;
+
+	//choose a tuning and pelog scale for counterclockwise motion
+	~tuning = Tuning.choose;
+	~scale = Array.new(4);
+	[36, 48, 60].do({ |i|
+		~scale.add((Scale.pelog(~tuning).degrees +i).midicps)});
+	~scale = ~scale.flatten;
 
 	~playCircle = {
 		|msg |
@@ -117,15 +135,16 @@ s.waitForBoot({
 				//play this sound while
 				if(progress == 'STATE_START', {
 					~proxy[0] = {
-						|amp = 0.1, detune=1, panLFOFreq=0|
+						|amp = 0.3, detune=1, panLFOFreq=0|
 						Splay.ar(
 							Formlet.ar(
-								WhiteNoise.ar*0.1,
+								WhiteNoise.ar*0.05,
 								angle.linexp(1, 100, 400, 100) * detune,
 								0.1,
-								0.5),
-							center: LFTri.kr(panLFOFreq)
-						)
+								0.5,
+								amp
+							),
+							center: LFTri.kr(panLFOFreq))
 					};
 				});
 
@@ -134,28 +153,42 @@ s.waitForBoot({
 					\size, radius.linlin(0, 15, 0.1, 1).min(1),
 					\damp, radius.linlin(0, 15, 1.0, 0),
 					\detune, radius.lincurve(0, 20, 1.0, 5, 4),
-					\panLFOFreq, radius.linlin(0, 20, 0, 5)
+					\panLFOFreq, radius.linlin(0, 20, 0, 5),
+					\amp, radius.linlin(0, 20, 0.3, 0.8)
 				);
 
 				if(progress == 'STATE_END',
-					{~proxy.fadeTime = 0.5;
+					{
+						~proxy.fadeTime = 0.5;
 						~proxy[0] = nil;
 				});
 			},
 
+			//if its counterclockwise
 			{if(progress == 'STATE_START',
 				{
-					(angle.linlin(1, 100, 50, 400)).postln;
+
+
+					~proxy[0] = nil;
+					(angle.linlin(10, 80, ~scale.size, 0)).postln;
 					~proxyPl[0] = {
-						Splay.ar(Pluck.ar(
-							WhiteNoise.ar,
-							1,
-							0.2,
-							(angle.linexp(1, 100, 600, 50)).reciprocal,
-							2,
-							rrand(0.2, 0.6),
-							rrand(0.3, 0.9))!2,
-						center:[0.8, -0.8].choose)
+						Splay.ar(
+							CombC.ar(
+								Pluck.ar(
+									WhiteNoise.ar,
+									1,
+									0.2,
+									//pitch determined by angle of circle
+									(~scale[(angle.linlin(10, 80, ~scale.size-1, 0))]).reciprocal,
+									2,
+									rrand(0.2, 0.6),
+									rrand(0.5, 1))!2,
+								0.2,
+								exprand(0.05, 0.2),
+								0.5
+							)
+							,
+							center:[0.8, -0.8].choose) * EnvGen.kr(Env.adsr(0.5,0.3, 2, 1), 1, doneAction:2)
 					};
 		});});
 
@@ -175,9 +208,6 @@ s.waitForBoot({
 	~forestStereo = BuffersFolder.read(~dirpath);
 
 
-
-
-
 	//////////////////////////////////////////////////////////////////////
 	////////////////////////////Proxys and sounds ///////////////////////////////////
 	//////////////////////////////////////////////////////////////////////
@@ -189,6 +219,7 @@ s.waitForBoot({
 
 	~proxyPl = NodeProxy.audio(s, 2);
 	~proxyPl.play;
+
 
 
 	~proxy[100] = \filter -> { arg in, delay=0.5, damp= 1, size = 1, diff= 0.707, feedback=0.5;
@@ -223,8 +254,10 @@ s.waitForBoot({
 
 	~start = 'no';
 
-	OSCdef(\wekinator, {|msg, time, addr, recvPort|
+	OSCdef(\wekinator, {
+		|msg, time, addr, recvPort|
 		msg.postln;
+
 
 		if(~start == 'no',
 			{
@@ -234,7 +267,7 @@ s.waitForBoot({
 					\instrument, \vplaym,
 					\buf, ~forestStereo[5],
 					\dur, Pwhite(1, 5),
-					\amp, 0.5,
+					\amp, 0.15,
 					\pos, Pwhite(0, 1),
 					\legato, 1.5
 				)).play;
@@ -257,7 +290,7 @@ s.waitForBoot({
 				\pan, msg[8].linlin(0, 1, -0.8, 0.8),
 				\panHz, msg[9].linlin(0, 1, 0, 10),
 				\panRand, msg[10].round(0.3),
-				\amp, msg[11].lincurve(0, 1, 0.5, 3, -2),
+				\amp, msg[11].lincurve(0.5, 1, 0.5, 3, -2),
 				\ampLFO, msg[12],
 				\lfoFreq, msg[13].linexp(0, 1, 0.5, 20));
 		}
@@ -271,11 +304,6 @@ s.waitForBoot({
 });
 
 s.reboot;
-
-
-
-
-
 
 )
 
